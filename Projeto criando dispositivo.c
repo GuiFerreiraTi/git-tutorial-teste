@@ -40,7 +40,7 @@ static bool ledLeavingNetwork = false;
 static bool ledStopSearchNetwork = false;
 static bool ledOnAction = false;
 static bool estavaAtivo = false;
-static bool TIMER;
+static bool TIMER = false;
 static bool LigarLed = false;
 
 // booleano estavaAtivo false
@@ -65,27 +65,26 @@ void inputActionEventFunction(void)
 	emberAfCorePrintln(">>>>>>>> RESET BUTTON: %d", buttonPressed);
 
 	if(buttonPressed){
-		emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
+		//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
 
 		if(timerIniciado != true) {
 			//Start 3 seconds timer
 			timerIniciado = true;
 			TIMER = true;
-			emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
+			//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
 			emberEventControlSetDelayMS(outputControllerEventControl, 3*1000);
 			emberEventControlSetActive(outputControllerEventControl);
         }
 		else {
 			timerIniciado = false;
 			TIMER = false;
-		}
+		     }
 
-	}else
-		{
-			emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
+	 }else {
+			//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
 			//emberEventControlSetActive(outputControllerEventControl);
 			//TIMER = false;
-		}
+      }
 
 	if(emberAfNetworkState() == EMBER_JOINED_NETWORK_NO_PARENT)
 		emberAfPluginConnectionManagerRejoinEventHandler();
@@ -108,7 +107,7 @@ void ledEventFunction(void)
      } //emberEventControlSetActive(ledEventControl); //led event function
      else {
 
-   	  halClearLed(LED_OUTPUT);
+   	      halClearLed(LED_OUTPUT);
 
      }
 }
@@ -123,7 +122,7 @@ void outputControllerEventFunction(void)
         LigarLed = false;
 
 	} else {
-        emberEventControlSetDelayMS(outputControllerEventControl, 3000);
+        //emberEventControlSetDelayMS(outputControllerEventControl, 3000);
         halSetLed(LED_STATUS);
         LigarLed = true;
         emberEventControlSetActive(ledEventControl);
