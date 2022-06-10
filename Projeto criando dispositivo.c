@@ -54,77 +54,336 @@ void resetZigbee(void);
 void sendStateFunction(void);
 /*** Output Controllers ***/
 void outputController(void);
-
+/*******************************/
 
 void inputActionEventFunction(void)
 {
-
 	emberEventControlSetInactive(inputActionEventControl);
 	//halCommonDelayMilliseconds(2);
 	emberAfCorePrintln(">>>>>>>> RESET COUNTER: %d", timerIniciado);
 	emberAfCorePrintln(">>>>>>>> RESET BUTTON: %d", buttonPressed);
 
 	if(buttonPressed){
-		//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
 
 		if(timerIniciado != true) {
-			//Start 3 seconds timer
+
 			timerIniciado = true;
-			TIMER = true;
-			//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
-			emberEventControlSetDelayMS(outputControllerEventControl, 3*1000);
-			emberEventControlSetActive(outputControllerEventControl);
+			emberEventControlSetDelayMS(outputControllerEventControl, 3*1000); //Start 3 seconds timer
         }
 		else {
 			timerIniciado = false;
 			TIMER = false;
+			emberEventControlSetActive(outputControllerEventControl);
 		     }
-
-	 }else {
-			//emberEventControlSetDelayMS(inputActionEventControl, 3*1000);
-			//emberEventControlSetActive(outputControllerEventControl);
-			//TIMER = false;
-      }
+	 }
 
 	if(emberAfNetworkState() == EMBER_JOINED_NETWORK_NO_PARENT)
 		emberAfPluginConnectionManagerRejoinEventHandler();
 }
-
 void ledEventFunction(void)
 {
-	//se estava ativo -> desativar, estava ativo falso
-    if(estavaAtivo == true){
+    if(estavaAtivo == true){ //se estava ativo -> desativar, estava ativo falso
 
-    	 halSetLed(LED_OUTPUT);
     	 emberEventControlSetDelayMS(ledEventControl, 300);
+    	 halClearLed(LED_OUTPUT);
 	     estavaAtivo = false;
     }
      else if(LigarLed == true){	//se nao estava ativo -> ativar, esta ativo
 
-    	  halClearLed(LED_OUTPUT);//muda estado do led
   		  emberEventControlSetDelayMS(ledEventControl, 300);
+    	  halSetLed(LED_OUTPUT);//muda estado do led
 	      estavaAtivo = true;
-     } //emberEventControlSetActive(ledEventControl); //led event function
-     else {
-
-   	      halClearLed(LED_OUTPUT);
-
      }
 }
-
 void outputControllerEventFunction(void)
 {
-
 	if(TIMER == false) {
-		TIMER = true;
-        emberEventControlSetDelayMS(outputControllerEventControl, 3000);
-        halClearLed(LED_STATUS);
-        LigarLed = false;
+		  TIMER = true;
+          halClearLed(LED_STATUS);
+          LigarLed = false;
 
-	} else {
-        //emberEventControlSetDelayMS(outputControllerEventControl, 3000);
-        halSetLed(LED_STATUS);
-        LigarLed = true;
-        emberEventControlSetActive(ledEventControl);
+	} else if (timerIniciado == true){
+          emberEventControlSetDelayMS(outputControllerEventControl, 3000);
+		  halSetLed(LED_STATUS);
+          LigarLed = true;
+          emberEventControlSetActive(ledEventControl);  //led event function
 	}
+	else {
+          halClearLed(LED_STATUS);
+	}
+}
+
+/*********************************************************************
+ * @fn      reportStatusEventFunction(void)
+ *
+ * @brief   Event function to periodically report
+ *
+ * @param   none
+ *
+ * @return  none
+ */
+void reportStatusEventFunction(void)
+{
+	sendStateFunction();
+	emberEventControlSetDelayMS(reportStatusEventControl, PERIODICALLY_REPORT_STATE);
+}
+
+//------------------------------------------------------------------------------
+/*
+ * Custom Function
+ */
+
+/*********************************************************************
+ * @fn      sendStateFunction(void)
+ *
+ * @brief   Send the actual state and save on token
+ *
+ * @param   none
+ *
+ * @return  none
+ */
+void sendStateFunction(void)
+{
+	uint8_t state;
+	if(statusOnOff == ON)
+		state = 0x01;
+	else
+		state = 0x00;
+
+	//uint8_t forSave = generateFirstDataByte();
+	emberAfWriteServerAttribute(DEVICE_ENDPOINT,
+			ZCL_ON_OFF_CLUSTER_ID,
+			ZCL_ON_OFF_ATTRIBUTE_ID,
+			(uint8_t *)&state,
+			ZCL_BOOLEAN_ATTRIBUTE_TYPE);
+
+}
+
+/*********************************************************************
+ * @fn      resetZigbee(void)
+ *
+ * @brief   Make the device leave the network and put it in permit join
+ *
+ * @param   none
+ *
+ * @return  none
+ */
+void resetZigbee(void)
+{
+	emberAfCorePrintln("\r\n");
+	emberAfCorePrintln("------------------------------------- {");
+	emberAfCorePrintln("	resetFunction");
+
+	emberAfPluginNetworkSteeringStop();
+
+	emberLeaveNetwork();
+	emberAfPluginConnectionManagerLeaveNetworkAndStartSearchForNewOne();
+	emberAfPluginConnectionManagerFactoryReset();
+
+	ledLeavingNetwork = true;
+	emberEventControlSetActive(ledEventControl);
+
+	emberAfCorePrintln("------------------------------------- }");
+	emberAfCorePrintln("\r\n");
+}
+
+/*********************************************************************
+ * @fn      outputController()
+ *
+ * @brief   Control function to output pin for action
+ *
+ * @param   none
+ *
+ * @return  none
+ */
+
+
+//------------------------------------------------------------------------------
+
+
+/** @brief Main Init
+ *
+ * This function is called from the application's main function. It gives the
+ * application a chance to do any initialization required at system startup.
+ * Any code that you would normally put into the top of the application's
+ * main() routine should be put into this function.
+        Note: No callback
+ * in the Application Framework is associated with resource cleanup. If you
+ * are implementing your application on a Unix host where resource cleanup is
+ * a consideration, we expect that you will use the standard Posix system
+ * calls, including the use of atexit() and handlers for signals such as
+ * SIGTERM, SIGINT, SIGCHLD, SIGPIPE and so on. If you use the signal()
+ * function to register your signal handler, please mind the returned value
+ * which may be an Application Framework function. If the return value is
+ * non-null, please make sure that you call the returned function from your
+ * handler to avoid negating the resource cleanup of the Application Framework
+ * itself.
+ *
+ */
+void emberAfMainInitCallback(void)
+{
+	emberEventControlSetDelayMS(reportStatusEventControl, PERIODICALLY_REPORT_STATE);
+}
+
+/** @brief Stack Status
+ *
+ * This function is called by the application framework from the stack status
+ * handler.  This callbacks provides applications an opportunity to be notified
+ * of changes to the stack status and take appropriate action.  The return code
+ * from this callback is ignored by the framework.  The framework will always
+ * process the stack status after the callback returns.
+ *
+ * @param status   Ver.: always
+ */
+bool emberAfStackStatusCallback(EmberStatus status)
+{
+	emberAfCorePrintln("\r\n");
+	emberAfCorePrintln("-------------------------------------");
+	emberAfCorePrintln("Stack Status Callback");
+	switch (status)
+	{
+	case EMBER_NETWORK_DOWN:
+		emberAfAppPrintln(" | NETWORK DOWN");
+		break;
+	case EMBER_NETWORK_UP:
+		emberAfAppPrintln(" | NETWORK UP");
+		uint16_t identifyTime;
+		emberAfReadServerAttribute(DEVICE_ENDPOINT,
+				ZCL_IDENTIFY_CLUSTER_ID,
+				ZCL_IDENTIFY_TIME_ATTRIBUTE_ID,
+				(uint8_t *)&identifyTime,
+				sizeof(identifyTime));
+		break;
+	}
+	emberAfCorePrintln("-------------------------------------");
+	emberAfCorePrintln("\r\n");
+
+	emberEventControlSetActive(ledEventControl);
+
+	return false;
+}
+
+/** @brief Begin searching for network to join
+ *
+ * This function is called by the Connection Manager Plugin when it starts
+ * to search for a new network.  It is normally used to trigger a UI event to
+ * notify the user that the device is currently searching for a network.
+ */
+void emberAfPluginConnectionManagerLeaveNetworkCallback(void)
+{
+	emberAfAppPrintln("\r\n");
+	emberAfAppPrintln("------------------------------------- {");
+	emberAfAppPrintln(" | emberAfPluginConnectionManagerLeaveNetworkCallback");
+	emberAfAppPrintln(" | START NTWK LEAVE");
+	emberAfAppPrintln("------------------------------------- }");
+	emberAfAppPrintln("\r\n");
+
+	ledLeavingNetwork = true;
+	emberEventControlSetDelayMS(ledEventControl, 100);
+}
+
+/** @brief Network join finished
+ *
+ * This callback is fired when the Connection Manager plugin is finished with
+ * the network search process. The result of the operation will be returned as
+ * the status parameter.
+ *
+ * @param status   Ver.: always
+ */
+void emberAfPluginConnectionManagerFinishedCallback(EmberStatus status)
+{
+	emberAfCorePrintln("\r\n");
+	emberAfCorePrintln("-------------------------------------");
+	emberAfCorePrintln("Connection Manager Finished Callback");
+
+	if (status == EMBER_NETWORK_UP) {
+		emberAfCorePrintln(" | SUCCESS");
+	} else {
+		emberAfCorePrintln(" | FAIL");
+		ledStopSearchNetwork = true;
+	}
+
+	emberEventControlSetActive(ledEventControl);
+
+	emberAfCorePrintln("-------------------------------------");
+	emberAfCorePrintln("\r\n");
+}
+
+/** @brief On/off Cluster Server Post Init
+ *
+ * Following resolution of the On/Off state at startup for this endpoint, perform any
+ * additional initialization needed; e.g., synchronize hardware state.
+ *
+ * @param endpoint Endpoint that is being initialized  Ver.: always
+ */
+void emberAfPluginOnOffClusterServerPostInitCallback(uint8_t endpoint)
+{
+	// At startup, trigger a read of the attribute and possibly a toggle of the
+	// LED to make sure they are always in sync.
+	emberAfOnOffClusterServerAttributeChangedCallback(endpoint,
+			ZCL_ON_OFF_ATTRIBUTE_ID);
+}
+
+/** @brief Server Attribute Changed
+ *
+ * On/off cluster, Server Attribute Changed
+ *
+ * @param endpoint Endpoint that is being initialized  Ver.: always
+ * @param attributeId Attribute that changed  Ver.: always
+ */
+void emberAfOnOffClusterServerAttributeChangedCallback(uint8_t endpoint,
+		EmberAfAttributeId attributeId)
+{
+	if (attributeId == ZCL_ON_OFF_ATTRIBUTE_ID) {
+		extern uint8_t appZclBuffer[255];
+		extern EmberApsFrame globalApsFrame;
+		extern uint16_t appZclBufferLen;
+		uint8_t data;
+		uint8_t size;
+		EmberAfAttributeType type = ZCL_BOOLEAN_ATTRIBUTE_TYPE;
+		if (emberAfReadServerAttribute(endpoint,
+				ZCL_ON_OFF_CLUSTER_ID,
+				ZCL_ON_OFF_ATTRIBUTE_ID,
+				&data,
+				sizeof(data))
+				== EMBER_ZCL_STATUS_SUCCESS) {
+
+			zclBufferSetup(ZCL_GLOBAL_COMMAND | (ZCL_FRAME_CONTROL_SERVER_TO_CLIENT), ZCL_ON_OFF_CLUSTER_ID, ZCL_REPORT_ATTRIBUTES_COMMAND_ID);
+			zclBufferAddWord(ZCL_ON_OFF_ATTRIBUTE_ID);
+			zclBufferAddByte(type);
+			size = emberAfGetDataSize(type);
+			zclBufferAddBuffer(&data,size);
+			emAfApsFrameEndpointSetup(endpoint, GATEWAY_ENDPOINT);
+			emberAfSendUnicast(EMBER_OUTGOING_DIRECT, 0, &globalApsFrame, appZclBufferLen, appZclBuffer);
+
+			emberAfAppPrintln("\r\n");
+			if (data) {
+				statusOnOff = ON;
+				emberAfAppPrintln(">>> ON <<<");
+			} else {
+				statusOnOff = OFF;
+				emberAfAppPrintln(">>> OFF <<<");
+			}
+			emberAfAppPrintln("\r\n");
+
+			//outputController();
+		}
+	}
+}
+
+/** @brief Hal Button Isr
+ *
+ * This callback is called by the framework whenever a button is pressed on the
+ * device. This callback is called within ISR context.
+ *
+ * @param button The button which has changed state, either BUTTON0 or BUTTON1
+ * as defined in the appropriate BOARD_HEADER.  Ver.: always
+ * @param state The new state of the button referenced by the button parameter,
+ * either ::BUTTON_PRESSED if the button has been pressed or ::BUTTON_RELEASED
+ * if the button has been released.  Ver.: always
+ */
+void emberAfHalButtonIsrCallback(int8u button, int8u state)
+{
+	buttonPressed = state;
+	emberEventControlSetActive(inputActionEventControl);
 }
